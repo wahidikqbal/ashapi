@@ -72,7 +72,7 @@ config :spark,
 config :ashapi,
   ecto_repos: [Ashapi.Repo],
   generators: [timestamp_type: :utc_datetime],
-  ash_domains: [Ashapi.Accounts]
+  ash_domains: [Ashapi.Blog, Ashapi.Accounts]
 
 # Configure the endpoint
 config :ashapi, AshapiWeb.Endpoint,
