@@ -1,5 +1,9 @@
 defmodule Ashapi.Blog.Post do
-  use Ash.Resource, otp_app: :ashapi, domain: Ashapi.Blog, data_layer: AshPostgres.DataLayer
+  use Ash.Resource, 
+    otp_app: :ashapi, 
+    domain: Ashapi.Blog, 
+    data_layer: AshPostgres.DataLayer,
+    extensions: [AshJsonApi.Resource]
 
   postgres do
     table "posts"
@@ -23,5 +27,21 @@ defmodule Ashapi.Blog.Post do
     end
 
     timestamps()
+  end
+
+  json_api do
+    type "post"
+
+    routes do
+      base "/posts"
+
+      get :read
+      index :read
+
+      post :create
+
+      patch :update
+      delete :destroy
+    end
   end
 end
