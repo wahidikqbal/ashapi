@@ -283,7 +283,9 @@ defmodule Ashapi.Accounts.User do
         route: "/sign-in",
         derive_filter?: false,
         metadata: fn _conn, user, _request ->
-          %{token: user.__metadata__.token}
+          %{
+            token: Map.get(user.__metadata__, :token)
+          }
       end
     end
   end
