@@ -9,9 +9,11 @@ defmodule Ashapi.Accounts.User do
   authentication do
     tokens do
       enabled? true
-      token_lifetime 24
+      token_lifetime {1, :hours}
       token_resource Ashapi.Accounts.Token
       signing_secret Ashapi.Secrets
+      store_all_tokens? true
+      require_token_presence_for_authentication? true
     end
     add_ons do
       log_out_everywhere do
@@ -29,13 +31,7 @@ defmodule Ashapi.Accounts.User do
       end
     end
 
-    tokens do
-      enabled? true
-      token_resource Ashapi.Accounts.Token
-      signing_secret Ashapi.Secrets
-      store_all_tokens? true
-      require_token_presence_for_authentication? true
-    end
+    # tokens configuration consolidated above
 
     strategies do
       password :password do
@@ -236,6 +232,10 @@ defmodule Ashapi.Accounts.User do
       authorize_if always()
     end
 
+    policy action(:change_password) do
+      authorize_if relates_to_actor_via(:itself, path: [:id])
+    end
+
     # public register
     policy action(:register_with_password) do
       authorize_if always()
@@ -253,6 +253,7 @@ defmodule Ashapi.Accounts.User do
     attribute :email, :ci_string do
       allow_nil? false
       public? true
+      constraints [match: ~r/^[^\s@]+@[^\s@]+\.[^\s@]+$/]
     end
 
     attribute :hashed_password, :string do
@@ -269,21 +270,21 @@ defmodule Ashapi.Accounts.User do
 
   json_api do
     type "user"
+    include_nil_values? false
     
     routes do
       base "/users"
 
-      post :register_with_password, route: "/register"
-      post :sign_in_with_password do
-        route "/sign-in"
-        
-        metadata fn _subject, user, _request ->
-          %{
-            token: user.__metadata__.token
-          }
-        end
+      post :register_with_password, 
+        route: "/register",
+        derive_filter?: false
+
+      post :sign_in_with_password,
+        route: "/sign-in",
+        derive_filter?: false,
+        metadata: fn _conn, user, _request ->
+          %{token: user.__metadata__.token}
       end
-      get :read
     end
   end
 end
