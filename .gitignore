@@ -35,3 +35,8 @@ ashapi-*.tar
 npm-debug.log
 /assets/node_modules/
 
+# Ignore config files for different environments, as they may contain sensitive information.
+dev.exs
+prod.exs
+test.exs
+

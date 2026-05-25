@@ -4,9 +4,15 @@ defmodule Ashapi.Accounts.User do
     domain: Ashapi.Accounts,
     data_layer: AshPostgres.DataLayer,
     authorizers: [Ash.Policy.Authorizer],
-    extensions: [AshAuthentication]
+    extensions: [AshAuthentication, AshJsonApi.Resource]
 
   authentication do
+    tokens do
+      enabled? true
+      token_lifetime 24
+      token_resource Ashapi.Accounts.Token
+      signing_secret Ashapi.Secrets
+    end
     add_ons do
       log_out_everywhere do
         apply_on_password_change? true
@@ -225,7 +231,18 @@ defmodule Ashapi.Accounts.User do
   end
 
   policies do
+    # auth interactions
     bypass AshAuthentication.Checks.AshAuthenticationInteraction do
+      authorize_if always()
+    end
+
+    # public register
+    policy action(:register_with_password) do
+      authorize_if always()
+    end
+
+    # public login
+    policy action(:sign_in_with_password) do
       authorize_if always()
     end
   end
@@ -248,5 +265,25 @@ defmodule Ashapi.Accounts.User do
 
   identities do
     identity :unique_email, [:email]
+  end
+
+  json_api do
+    type "user"
+    
+    routes do
+      base "/users"
+
+      post :register_with_password, route: "/register"
+      post :sign_in_with_password do
+        route "/sign-in"
+        
+        metadata fn _subject, user, _request ->
+          %{
+            token: user.__metadata__.token
+          }
+        end
+      end
+      get :read
+    end
   end
 end
