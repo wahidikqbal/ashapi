@@ -3,6 +3,7 @@ defmodule Ashapi.Blog.Post do
     otp_app: :ashapi, 
     domain: Ashapi.Blog, 
     data_layer: AshPostgres.DataLayer,
+    authorizers: [Ash.Policy.Authorizer],
     extensions: [AshJsonApi.Resource]
 
   postgres do
@@ -27,6 +28,18 @@ defmodule Ashapi.Blog.Post do
     end
 
     timestamps()
+  end
+
+  policies do
+    # semua orang boleh baca
+    policy action_type(:read) do
+      authorize_if always()
+    end
+
+    # create/update/delete harus login
+    policy action_type([:create, :update, :destroy]) do
+      authorize_if actor_present()
+    end
   end
 
   json_api do
