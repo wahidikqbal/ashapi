@@ -2,7 +2,7 @@ defmodule AshapiWeb.AuthController do
   use AshapiWeb, :controller
   use AshAuthentication.Phoenix.Controller
 
-  def success(conn, activity, user, _token) do
+  def success(conn, activity, user, token) do
     return_to = get_session(conn, :return_to) || ~p"/"
 
     message =
@@ -15,6 +15,17 @@ defmodule AshapiWeb.AuthController do
     conn
     |> delete_session(:return_to)
     |> store_in_session(user)
+    |> put_resp_cookie("token", token,
+        http_only: true,
+        secure: false,          # hanya via HTTPS, pada saat deploy, bisa diatur ke false saat development
+        same_site: "Lax",   # proteksi CSRF, pada saat deploy, bisa diatur ke "Lax" untuk kemudahan testing
+        max_age: 86400         # 24 jam, sesuai token_lifetime
+      )
+    |> json(%{
+      success: true,
+      message: message,
+      token: token
+    })
     # If your resource has a different name, update the assign name here (i.e :current_admin)
     |> assign(:current_user, user)
     |> put_flash(:info, message)

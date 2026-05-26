@@ -17,6 +17,8 @@ defmodule AshapiWeb.Router do
 
   pipeline :api do
     plug :accepts, ["json"]
+    # plug AshapiWeb.Plugs.CheckOrigin
+    plug AshapiWeb.Plugs.TokenFromCookie
     plug :load_from_bearer
     plug :set_actor, :user
   end
