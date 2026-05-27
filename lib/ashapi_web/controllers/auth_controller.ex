@@ -106,4 +106,34 @@ defmodule AshapiWeb.AuthController do
            })
     end
   end
+
+  def logout(conn, _params) do
+    conn
+    |> delete_resp_cookie("token")
+    |> put_status(:ok)
+    |> json(%{
+      success: true,
+      message: "Logged out"
+    })
+  end
+
+  def me(conn, _params) do
+    current_user = conn.assigns[:current_user]
+
+    if current_user do
+      json(conn, %{
+        authenticated: true,
+        user: %{
+          id: current_user.id,
+          email: current_user.email
+        }
+      })
+    else
+      conn
+      |> put_status(:unauthorized)
+      |> json(%{
+          authenticated: false
+        })
+    end
+  end
 end

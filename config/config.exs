@@ -75,10 +75,6 @@ config :ashapi,
   ash_domains: [Ashapi.Blog, Ashapi.Accounts],
   env: Mix.env()
 
-# CORS Configuration - environment-specific values set in dev.exs, prod.exs, runtime.exs
-config :ashapi, :cors,
-  allowed_origins: ["http://localhost:3000"]  # Default, overridden in dev/prod configs
-
 # Configure the endpoint
 config :ashapi, AshapiWeb.Endpoint,
   url: [host: "localhost"],

@@ -22,6 +22,8 @@ defmodule AshapiWeb.Router do
     plug AshapiWeb.Plugs.TokenFromCookie
     plug :load_from_bearer
     plug :set_actor, :user
+    plug :fetch_cookies
+    plug AshapiWeb.Plugs.AuthPlug
   end
 
   scope "/", AshapiWeb do
@@ -46,6 +48,7 @@ defmodule AshapiWeb.Router do
 
     post "/login", AuthController, :login # CUSTOM LOGIN ROUTE, SESUAIKAN DENGAN STRATEGI AUTENTIKASI YANG DIGUNAKAN
     post "/logout", AuthController, :logout # CUSTOM LOGOUT ROUTE, SESUAIKAN DENGAN STRATEGI AUTENTIKASI YANG DIGUNAKAN
+    get "/me", AuthController, :me
   end
 
   scope "/api/json" do
