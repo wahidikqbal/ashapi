@@ -2,19 +2,36 @@
 defmodule AshapiWeb.Plugs.CheckOrigin do
   import Plug.Conn
 
-  #@allowed_origins ["https://yourdomain.com"] # ganti dengan domain frontend Anda, pada saat development bisa diatur ke ["http://localhost:3000"] atau ["*"] untuk menerima semua origin (tidak disarankan untuk production)
-  @allowed_origins ["*"] # untuk kemudahan testing, menerima semua origin. Ganti dengan domain frontend Anda saat deploy ke production.
   def init(opts), do: opts
 
   def call(conn, _opts) do
     origin = get_req_header(conn, "origin") |> List.first()
+    cors_config = Application.get_env(:ashapi, :cors, []) || []
+    allowed_origins =
+      case cors_config do
+        list when is_list(list) -> Keyword.get(list, :allowed_origins, [])
+        map when is_map(map) -> Map.get(map, :allowed_origins, []) || []
+        _ -> []
+      end
 
-    if origin in @allowed_origins or "*" in @allowed_origins do
-      conn
-    else
-      conn
-      |> send_resp(403, "Forbidden")
-      |> halt()
+    cond do
+      is_nil(origin) ->
+        # No origin header - allow (requests without origin like direct API calls)
+        conn
+
+      origin in allowed_origins ->
+        # Origin is allowed
+        conn
+
+      "*" in allowed_origins ->
+        # Wildcard allowed (not recommended for production)
+        conn
+
+      true ->
+        # Origin not allowed - reject
+        conn
+        |> send_resp(403, "Forbidden - Origin not allowed")
+        |> halt()
     end
   end
 end

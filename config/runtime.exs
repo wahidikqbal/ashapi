@@ -73,6 +73,27 @@ if config_env() == :prod do
       System.get_env("TOKEN_SIGNING_SECRET") ||
         raise("Missing environment variable `TOKEN_SIGNING_SECRET`!")
 
+  # CORS Configuration for production runtime
+  # Set CORS_ALLOWED_ORIGINS environment variable with comma-separated origins
+  # Example: CORS_ALLOWED_ORIGINS=https://example.com,https://app.example.com
+  cors_origins_env = System.get_env("CORS_ALLOWED_ORIGINS", "")
+
+  cors_allowed_origins =
+    if cors_origins_env == "" do
+      raise """
+      environment variable CORS_ALLOWED_ORIGINS is missing.
+      Set it to a comma-separated list of allowed origins, e.g.:
+      CORS_ALLOWED_ORIGINS=https://example.com,https://app.example.com
+      """
+    else
+      cors_origins_env
+      |> String.split(",")
+      |> Enum.map(&String.trim/1)
+    end
+
+  config :ashapi, :cors,
+    allowed_origins: cors_allowed_origins
+
   # ## SSL Support
   #
   # To get SSL working, you will need to add the `https` key

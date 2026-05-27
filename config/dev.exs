@@ -71,6 +71,19 @@ config :ashapi, AshapiWeb.Endpoint,
 # Enable dev routes for dashboard and mailbox
 config :ashapi, dev_routes: true, token_signing_secret: "/UmNjUJJ0HiZvSrGQuxbYUrHudh5q65l"
 
+# CORS Configuration for development
+config :ashapi, :cors,
+  allowed_origins: [
+    "http://localhost:3000",   # Common dev port
+    "http://localhost:5173",   # Vite dev server (default)
+    "http://localhost:5174",   # Vite alternative
+    "http://localhost:5500",   # Live Server extension for VSCode
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+    "http://127.0.0.1:5500"    # Live Server extension for VSCode
+  ]
+
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 
