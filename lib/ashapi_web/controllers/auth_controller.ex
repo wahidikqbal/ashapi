@@ -94,7 +94,7 @@ defmodule AshapiWeb.AuthController do
            )
         |> json(%{
              success: true,
-             token: token
+             message: "You are now signed in",
            })
 
       {:error, _error} ->
@@ -109,6 +109,7 @@ defmodule AshapiWeb.AuthController do
 
   def logout(conn, _params) do
     conn
+    |> revoke_token()
     |> delete_resp_cookie("token")
     |> put_status(:ok)
     |> json(%{
@@ -116,6 +117,30 @@ defmodule AshapiWeb.AuthController do
       message: "Logged out"
     })
   end
+
+  defp revoke_token(conn) do
+    
+    conn = fetch_cookies(conn)
+
+    case get_token_from_conn(conn) do
+      nil -> conn
+      token ->
+        _ = AshAuthentication.TokenResource.revoke(Ashapi.Accounts.User, token)
+        conn
+    end
+  end
+
+  defp get_token_from_conn(conn) do
+    conn.cookies["token"] ||
+      conn
+      |> get_req_header("authorization")
+      |> List.first()
+      |> strip_bearer()
+  end
+
+  defp strip_bearer("Bearer " <> token), do: token
+  defp strip_bearer("bearer " <> token), do: token
+  defp strip_bearer(_), do: nil
 
   def me(conn, _params) do
     current_user = conn.assigns[:current_user]
