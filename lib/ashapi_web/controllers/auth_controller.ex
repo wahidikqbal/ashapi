@@ -119,13 +119,27 @@ defmodule AshapiWeb.AuthController do
   end
 
   defp revoke_token(conn) do
-    
     conn = fetch_cookies(conn)
 
     case get_token_from_conn(conn) do
-      nil -> conn
+      nil ->
+        conn
+
       token ->
-        _ = AshAuthentication.TokenResource.revoke(Ashapi.Accounts.User, token)
+        case AshAuthentication.TokenResource.revoke(
+              Ashapi.Accounts.Token,
+              token
+            ) do
+          :ok ->
+            IO.puts("TOKEN REVOKED")
+
+          {:error, error} ->
+            IO.inspect(error, label: "REVOKE ERROR")
+
+          other ->
+            IO.inspect(other, label: "REVOKE RESULT")
+        end
+
         conn
     end
   end
