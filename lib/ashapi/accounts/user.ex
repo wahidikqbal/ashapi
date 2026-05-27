@@ -38,6 +38,8 @@ defmodule Ashapi.Accounts.User do
         identity_field :email
         hash_provider AshAuthentication.BcryptProvider
 
+        sign_in_tokens_enabled? true
+
         resettable do
           sender Ashapi.Accounts.User.Senders.SendPasswordResetEmail
           # these configurations will be the default in a future release
@@ -279,14 +281,7 @@ defmodule Ashapi.Accounts.User do
         route: "/register",
         derive_filter?: false
 
-      post :sign_in_with_password,
-        route: "/sign-in",
-        derive_filter?: false,
-        metadata: fn _conn, user, _request ->
-          %{
-            token: Map.get(user.__metadata__, :token)
-          }
-      end
+      # LOGIN DITANGANI OLEH AUTH CONTROLLER, JADI TIDAK PERLU DITAMBAHKAN DI SINI
     end
   end
 end

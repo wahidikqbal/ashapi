@@ -53,6 +53,10 @@ defmodule AshapiWeb.AuthController do
     conn
     |> put_flash(:error, message)
     |> redirect(to: ~p"/sign-in")
+    |> put_status(:unauthorized)
+    |> json(%{
+     error: "Incorrect email or password"
+   })
   end
 
   def sign_out(conn, _params) do
@@ -60,7 +64,46 @@ defmodule AshapiWeb.AuthController do
 
     conn
     |> clear_session(:ashapi)
+    |> delete_resp_cookie("token")
     |> put_flash(:info, "You are now signed out")
     |> redirect(to: return_to)
+  end
+
+  def login(conn, params) do
+    attributes =
+      get_in(params, ["data", "attributes"]) || %{}
+
+    case Ashapi.Accounts.User
+         |> Ash.Query.for_read(
+              :sign_in_with_password,
+              attributes
+            )
+         |> Ash.read_one() do
+      {:ok, user} ->
+        token =
+          user.__metadata__.token
+
+        conn
+        |> put_resp_cookie(
+             "token",
+             token,
+             http_only: true,
+             secure: false,
+             same_site: "Lax",
+             max_age: 86_400
+           )
+        |> json(%{
+             success: true,
+             token: token
+           })
+
+      {:error, _error} ->
+        conn
+        |> put_status(:unauthorized)
+        |> json(%{
+             success: false,
+             error: "Incorrect email or password"
+           })
+    end
   end
 end

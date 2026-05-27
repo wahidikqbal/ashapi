@@ -41,6 +41,13 @@ defmodule AshapiWeb.Router do
     end
   end
 
+  scope "/api", AshapiWeb do
+    pipe_through :api
+
+    post "/login", AuthController, :login # CUSTOM LOGIN ROUTE, SESUAIKAN DENGAN STRATEGI AUTENTIKASI YANG DIGUNAKAN
+    post "/logout", AuthController, :logout # CUSTOM LOGOUT ROUTE, SESUAIKAN DENGAN STRATEGI AUTENTIKASI YANG DIGUNAKAN
+  end
+
   scope "/api/json" do
     pipe_through [:api]
 

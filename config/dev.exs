@@ -74,13 +74,15 @@ config :ashapi, dev_routes: true, token_signing_secret: "/UmNjUJJ0HiZvSrGQuxbYUr
 # CORS Configuration for development
 config :ashapi, :cors,
   allowed_origins: [
+    "http://localhost:4000",   # Phoenix server port
     "http://localhost:3000",   # Common dev port
     "http://localhost:5173",   # Vite dev server (default)
-    "http://localhost:5174",   # Vite alternative
+    "http://localhost:4321",   # Vite alternative
     "http://localhost:5500",   # Live Server extension for VSCode
+    "http://127.0.0.1:4000",   # Phoenix server port (loopback)
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173",
-    "http://127.0.0.1:5174",
+    "http://127.0.0.1:4321",
     "http://127.0.0.1:5500"    # Live Server extension for VSCode
   ]
 
