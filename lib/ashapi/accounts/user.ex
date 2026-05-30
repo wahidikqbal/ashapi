@@ -282,6 +282,15 @@ defmodule Ashapi.Accounts.User do
         derive_filter?: false
 
       # LOGIN DITANGANI OLEH AUTH CONTROLLER, JADI TIDAK PERLU DITAMBAHKAN DI SINI
+      post :sign_in_with_password, # LOGIN HANYA UNTUK TEST DI SWAGGER UI, SEBAIKNYA LOGIN DITANGANI OLEH CONTROLLER TERPISAH
+        route: "/sign-in",
+        derive_filter?: false,
+        metadata: fn _conn, user, _request ->
+          %{
+            token: Map.get(user.__metadata__, :token)
+          }
+      end
+
     end
   end
 end
