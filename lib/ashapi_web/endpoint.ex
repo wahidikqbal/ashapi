@@ -10,7 +10,7 @@ defmodule AshapiWeb.Endpoint do
     signing_salt: "OzoUiag1",
     same_site: "Strict",
     http_only: true,
-    secure: Application.compile_env(:ashapi, :env) == :prod
+    secure: Application.compile_env(:ashapi, :cookie_secure, false)
   ]
 
   socket "/live", Phoenix.LiveView.Socket,

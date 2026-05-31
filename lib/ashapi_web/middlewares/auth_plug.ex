@@ -8,7 +8,8 @@ defmodule AshapiWeb.Plugs.AuthPlug do
   def init(opts), do: opts
 
   def call(conn, _opts) do
-    token = conn.cookies["token"]
+    cookie_name = Application.get_env(:ashapi, :token_cookie_name, "token")
+    token = conn.cookies[cookie_name]
 
     case token do
       nil ->

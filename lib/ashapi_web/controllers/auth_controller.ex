@@ -2,8 +2,6 @@ defmodule AshapiWeb.AuthController do
   use AshapiWeb, :controller
   use AshAuthentication.Phoenix.Controller
 
-  @secure_cookie Application.compile_env(:ashapi, :env) == :prod
-
   def success(conn, activity, user, token) do
     return_to = get_session(conn, :return_to) || ~p"/"
 
@@ -17,10 +15,10 @@ defmodule AshapiWeb.AuthController do
     conn
     |> delete_session(:return_to)
     |> store_in_session(user)
-    |> put_resp_cookie("token", token,
+    |> put_resp_cookie(cookie_name(), token,
         path: "/",
         http_only: true,
-        secure: @secure_cookie,
+        secure: cookie_secure?(),
         same_site: "Strict",
         max_age: 86_400
       )
@@ -41,7 +39,7 @@ defmodule AshapiWeb.AuthController do
     conn
     |> revoke_token()
     |> configure_session(drop: true)
-    |> delete_resp_cookie("token")
+    |> delete_resp_cookie(cookie_name())
     |> put_flash(:info, "You are now signed out")
     |> redirect(to: return_to)
   end
@@ -63,10 +61,10 @@ defmodule AshapiWeb.AuthController do
         conn
         |> assign(:current_user, user)
         |> put_resp_cookie(
-             "token",
+             cookie_name(),
              token,
              http_only: true,
-             secure: @secure_cookie,
+             secure: cookie_secure?(),
              same_site: "Strict",
              max_age: 86_400
            )
@@ -88,12 +86,20 @@ defmodule AshapiWeb.AuthController do
   def logout(conn, _params) do
     conn
     |> revoke_token()
-    |> delete_resp_cookie("token")
+    |> delete_resp_cookie(cookie_name())
     |> put_status(:ok)
     |> json(%{
       success: true,
       message: "Logged out"
     })
+  end
+
+  defp cookie_name do
+    Application.get_env(:ashapi, :token_cookie_name, "token")
+  end
+
+  defp cookie_secure? do
+    Application.get_env(:ashapi, :cookie_secure, false)
   end
 
   defp revoke_token(conn) do
@@ -123,7 +129,7 @@ defmodule AshapiWeb.AuthController do
   end
 
   defp get_token_from_conn(conn) do
-    conn.cookies["token"] ||
+    conn.cookies[cookie_name()] ||
       conn
       |> get_req_header("authorization")
       |> List.first()
