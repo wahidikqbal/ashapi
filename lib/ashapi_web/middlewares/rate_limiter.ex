@@ -40,6 +40,16 @@ defmodule AshapiWeb.Plugs.RateLimiter do
     now - rem(now, @window_ms)
   end
 
+  def child_spec(_opts) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, [[]]},
+      type: :worker,
+      restart: :permanent,
+      shutdown: 500
+    }
+  end
+
   def start_link(_opts) do
     Task.start_link(&cleanup_loop/0)
   end

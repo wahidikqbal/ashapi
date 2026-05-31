@@ -127,37 +127,42 @@ if config_env() == :prod do
   # Check `Plug.SSL` for all available options in `force_ssl`.
 
   # Mailer configuration
-  # Set MAILER_ADAPTER to choose the adapter: "mailgun", "postmark", "sendgrid", or "smtp"
   mailer_adapter = System.get_env("MAILER_ADAPTER", "mailgun")
 
-  config :ashapi, Ashapi.Mailer,
-    adapter:
-      case mailer_adapter do
-        "postmark" -> Swoosh.Adapters.Postmark
-        "sendgrid" -> Swoosh.Adapters.Sendgrid
-        "smtp" -> Swoosh.Adapters.SMTP
-        _ -> Swoosh.Adapters.Mailgun
-      end
+  adapter_module =
+    case mailer_adapter do
+      "postmark" -> Swoosh.Adapters.Postmark
+      "sendgrid" -> Swoosh.Adapters.Sendgrid
+      "smtp" -> Swoosh.Adapters.SMTP
+      _ -> Swoosh.Adapters.Mailgun
+    end
 
-  if mailer_adapter == "mailgun" do
-    config :ashapi, Ashapi.Mailer,
-      api_key: System.get_env("MAILGUN_API_KEY"),
-      domain: System.get_env("MAILGUN_DOMAIN")
-  end
+  mailer_config = [
+    adapter: adapter_module
+  ]
 
-  if mailer_adapter == "postmark" do
-    config :ashapi, Ashapi.Mailer,
-      api_key: System.get_env("POSTMARK_API_KEY")
-  end
+  mailer_config =
+    case mailer_adapter do
+      "mailgun" ->
+        Keyword.put(mailer_config, :api_key, System.get_env("MAILGUN_API_KEY"))
+        |> Keyword.put(:domain, System.get_env("MAILGUN_DOMAIN"))
 
-  if mailer_adapter == "sendgrid" do
-    config :ashapi, Ashapi.Mailer,
-      api_key: System.get_env("SENDGRID_API_KEY")
-  end
+      "postmark" ->
+        Keyword.put(mailer_config, :api_key, System.get_env("POSTMARK_API_KEY"))
 
-  # From address for emails
+      "sendgrid" ->
+        Keyword.put(mailer_config, :api_key, System.get_env("SENDGRID_API_KEY"))
+
+      _ ->
+        mailer_config
+    end
+
+  config :ashapi, Ashapi.Mailer, mailer_config
+
+  from_name = System.get_env("MAILER_FROM_NAME", "Ashapi")
+  from_email = System.get_env("MAILER_FROM_EMAIL", "noreply@example.com")
+
   config :ashapi, :mailer,
-    from_address:
-      {System.get_env("MAILER_FROM_NAME", "Ashapi"), System.get_env("MAILER_FROM_EMAIL", "noreply@example.com")},
-    from_email: System.get_env("MAILER_FROM_EMAIL", "noreply@example.com")
+    from_address: {from_name, from_email},
+    from_email: from_email
 end
