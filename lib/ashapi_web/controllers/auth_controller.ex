@@ -2,6 +2,8 @@ defmodule AshapiWeb.AuthController do
   use AshapiWeb, :controller
   use AshAuthentication.Phoenix.Controller
 
+  @secure_cookie Application.compile_env(:ashapi, :env) == :prod
+
   def success(conn, activity, user, token) do
     return_to = get_session(conn, :return_to) || ~p"/"
 
@@ -18,53 +20,27 @@ defmodule AshapiWeb.AuthController do
     |> put_resp_cookie("token", token,
         path: "/",
         http_only: true,
-        secure: false,          # hanya via HTTPS, pada saat deploy, bisa diatur ke false saat development
-        same_site: "Lax",   # proteksi CSRF, pada saat deploy, bisa diatur ke "Lax" untuk kemudahan testing
-        max_age: 60         # ubah menjadi 86400, untuk 24 jam, sesuai token_lifetime
+        secure: @secure_cookie,
+        same_site: "Strict",
+        max_age: 86_400
       )
-    |> json(%{
-      success: true,
-      message: message,
-      token: token
-    })
-    # If your resource has a different name, update the assign name here (i.e :current_admin)
     |> assign(:current_user, user)
     |> put_flash(:info, message)
     |> redirect(to: return_to)
   end
 
-  def failure(conn, activity, reason) do
-    message =
-      case {activity, reason} do
-        {_,
-         %AshAuthentication.Errors.AuthenticationFailed{
-           caused_by: %Ash.Error.Forbidden{
-             errors: [%AshAuthentication.Errors.CannotConfirmUnconfirmedUser{}]
-           }
-         }} ->
-          """
-          You have already signed in another way, but have not confirmed your account.
-          You can confirm your account using the link we sent to you, or by resetting your password.
-          """
-
-        _ ->
-          "Incorrect email or password"
-      end
-
+  def failure(conn, _activity, _reason) do
     conn
-    |> put_flash(:error, message)
+    |> put_flash(:error, "Incorrect email or password")
     |> redirect(to: ~p"/sign-in")
-    |> put_status(:unauthorized)
-    |> json(%{
-     error: "Incorrect email or password"
-   })
   end
 
   def sign_out(conn, _params) do
     return_to = get_session(conn, :return_to) || ~p"/"
 
     conn
-    |> clear_session(:ashapi)
+    |> revoke_token()
+    |> configure_session(drop: true)
     |> delete_resp_cookie("token")
     |> put_flash(:info, "You are now signed out")
     |> redirect(to: return_to)
@@ -85,12 +61,13 @@ defmodule AshapiWeb.AuthController do
           user.__metadata__.token
 
         conn
+        |> assign(:current_user, user)
         |> put_resp_cookie(
              "token",
              token,
              http_only: true,
-             secure: false,
-             same_site: "Lax",
+             secure: @secure_cookie,
+             same_site: "Strict",
              max_age: 86_400
            )
         |> json(%{
