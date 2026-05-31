@@ -9,7 +9,7 @@ defmodule Ashapi.Accounts.User do
   authentication do
     tokens do
       enabled? true
-      token_lifetime {1, :hours}
+      token_lifetime {1, :minutes} # ubah menjadi {24, :hours} untuk 24 jam
       token_resource Ashapi.Accounts.Token
       signing_secret Ashapi.Secrets
       store_all_tokens? true

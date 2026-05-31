@@ -16,10 +16,11 @@ defmodule AshapiWeb.AuthController do
     |> delete_session(:return_to)
     |> store_in_session(user)
     |> put_resp_cookie("token", token,
+        path: "/",
         http_only: true,
         secure: false,          # hanya via HTTPS, pada saat deploy, bisa diatur ke false saat development
         same_site: "Lax",   # proteksi CSRF, pada saat deploy, bisa diatur ke "Lax" untuk kemudahan testing
-        max_age: 86400         # 24 jam, sesuai token_lifetime
+        max_age: 60         # ubah menjadi 86400, untuk 24 jam, sesuai token_lifetime
       )
     |> json(%{
       success: true,
