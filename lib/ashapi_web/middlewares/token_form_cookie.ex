@@ -4,10 +4,6 @@ defmodule AshapiWeb.Plugs.TokenFromCookie do
   def init(opts), do: opts
 
   def call(conn, _opts) do
-    # Extract token from httpOnly cookie if present
-    # The token should be stored in a HttpOnly, Secure, SameSite cookie
-    conn = fetch_cookies(conn)
-
     case conn.cookies["token"] do
       nil ->
         # No cookie token, check for Bearer token in Authorization header instead

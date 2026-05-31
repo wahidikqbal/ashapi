@@ -12,9 +12,10 @@ defmodule Ashapi.Accounts.User.Senders.SendPasswordResetEmail do
 
   @impl true
   def send(user, token, _) do
+    from_address = Application.get_env(:ashapi, :mailer, []) |> Keyword.get(:from_address, {"Ashapi", "noreply@example.com"})
+
     new()
-    # TODO: Replace with your email
-    |> from({"noreply", "noreply@example.com"})
+    |> from(from_address)
     |> to(to_string(user.email))
     |> subject("Reset your password")
     |> html_body(body(token: token))

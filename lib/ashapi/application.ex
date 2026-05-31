@@ -12,9 +12,7 @@ defmodule Ashapi.Application do
       Ashapi.Repo,
       {DNSCluster, query: Application.get_env(:ashapi, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Ashapi.PubSub},
-      # Start a worker by calling: Ashapi.Worker.start_link(arg)
-      # {Ashapi.Worker, arg},
-      # Start to serve requests, typically the last entry
+      {AshapiWeb.Plugs.RateLimiter, []},
       AshapiWeb.Endpoint,
       {AshAuthentication.Supervisor, [otp_app: :ashapi]}
     ]

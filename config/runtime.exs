@@ -126,21 +126,38 @@ if config_env() == :prod do
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
 
-  # ## Configuring the mailer
-  #
-  # In production you need to configure the mailer to use a different adapter.
-  # Here is an example configuration for Mailgun:
-  #
-  #     config :ashapi, Ashapi.Mailer,
-  #       adapter: Swoosh.Adapters.Mailgun,
-  #       api_key: System.get_env("MAILGUN_API_KEY"),
-  #       domain: System.get_env("MAILGUN_DOMAIN")
-  #
-  # Most non-SMTP adapters require an API client. Swoosh supports Req, Hackney,
-  # and Finch out-of-the-box. This configuration is typically done at
-  # compile-time in your config/prod.exs:
-  #
-  #     config :swoosh, :api_client, Swoosh.ApiClient.Req
-  #
-  # See https://hexdocs.pm/swoosh/Swoosh.html#module-installation for details.
+  # Mailer configuration
+  # Set MAILER_ADAPTER to choose the adapter: "mailgun", "postmark", "sendgrid", or "smtp"
+  mailer_adapter = System.get_env("MAILER_ADAPTER", "mailgun")
+
+  config :ashapi, Ashapi.Mailer,
+    adapter:
+      case mailer_adapter do
+        "postmark" -> Swoosh.Adapters.Postmark
+        "sendgrid" -> Swoosh.Adapters.Sendgrid
+        "smtp" -> Swoosh.Adapters.SMTP
+        _ -> Swoosh.Adapters.Mailgun
+      end
+
+  if mailer_adapter == "mailgun" do
+    config :ashapi, Ashapi.Mailer,
+      api_key: System.get_env("MAILGUN_API_KEY"),
+      domain: System.get_env("MAILGUN_DOMAIN")
+  end
+
+  if mailer_adapter == "postmark" do
+    config :ashapi, Ashapi.Mailer,
+      api_key: System.get_env("POSTMARK_API_KEY")
+  end
+
+  if mailer_adapter == "sendgrid" do
+    config :ashapi, Ashapi.Mailer,
+      api_key: System.get_env("SENDGRID_API_KEY")
+  end
+
+  # From address for emails
+  config :ashapi, :mailer,
+    from_address:
+      {System.get_env("MAILER_FROM_NAME", "Ashapi"), System.get_env("MAILER_FROM_EMAIL", "noreply@example.com")},
+    from_email: System.get_env("MAILER_FROM_EMAIL", "noreply@example.com")
 end

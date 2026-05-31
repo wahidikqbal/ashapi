@@ -19,35 +19,34 @@ defmodule AshapiWeb.Router do
     plug :accepts, ["json"]
     plug :put_secure_browser_headers
     plug AshapiWeb.Plugs.CheckOrigin
+    plug :fetch_cookies
     plug AshapiWeb.Plugs.TokenFromCookie
     plug :load_from_bearer
     plug :set_actor, :user
-    plug :fetch_cookies
     plug AshapiWeb.Plugs.AuthPlug
+  end
+
+  pipeline :rate_limited do
+    plug AshapiWeb.Plugs.RateLimiter, max: 10
   end
 
   scope "/", AshapiWeb do
     pipe_through :browser
 
     ash_authentication_live_session :authenticated_routes do
-      # in each liveview, add one of the following at the top of the module:
-      #
-      # If an authenticated user must be present:
-      # on_mount {AshapiWeb.LiveUserAuth, :live_user_required}
-      #
-      # If an authenticated user *may* be present:
-      # on_mount {AshapiWeb.LiveUserAuth, :live_user_optional}
-      #
-      # If an authenticated user must *not* be present:
-      # on_mount {AshapiWeb.LiveUserAuth, :live_no_user}
     end
+  end
+
+  scope "/api", AshapiWeb do
+    pipe_through [:api, :rate_limited]
+
+    post "/auth/login", AuthController, :login
+    post "/auth/logout", AuthController, :logout
   end
 
   scope "/api", AshapiWeb do
     pipe_through :api
 
-    post "/auth/login", AuthController, :login # CUSTOM LOGIN ROUTE, SESUAIKAN DENGAN STRATEGI AUTENTIKASI YANG DIGUNAKAN
-    post "/auth/logout", AuthController, :logout # CUSTOM LOGOUT ROUTE, SESUAIKAN DENGAN STRATEGI AUTENTIKASI YANG DIGUNAKAN
     get "/auth/me", AuthController, :me
   end
 

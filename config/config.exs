@@ -95,6 +95,10 @@ config :ashapi, AshapiWeb.Endpoint,
 # at the `config/runtime.exs`.
 config :ashapi, Ashapi.Mailer, adapter: Swoosh.Adapters.Local
 
+config :ashapi, :mailer,
+  from_address: {"Ashapi", "noreply@example.com"},
+  from_email: "noreply@example.com"
+
 # Configure esbuild (the version is required)
 config :esbuild,
   version: "0.25.4",
