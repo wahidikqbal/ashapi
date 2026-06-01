@@ -9,12 +9,13 @@ defmodule Ashapi.Accounts.User do
   authentication do
     tokens do
       enabled? true
-      token_lifetime {1, :minutes}
+      token_lifetime {30, :minutes}
       token_resource Ashapi.Accounts.Token
       signing_secret Ashapi.Secrets
       store_all_tokens? true
       require_token_presence_for_authentication? true
     end
+
     add_ons do
       log_out_everywhere do
         apply_on_password_change? true
@@ -55,6 +56,31 @@ defmodule Ashapi.Accounts.User do
   postgres do
     table "users"
     repo Ashapi.Repo
+  end
+
+  json_api do
+    type "user"
+    include_nil_values? false
+
+    routes do
+      base "/users"
+
+      post :register_with_password,
+        route: "/register",
+        derive_filter?: false
+
+      # LOGIN DITANGANI OLEH AUTH CONTROLLER, JADI TIDAK PERLU DITAMBAHKAN DI SINI
+
+      # LOGIN HANYA UNTUK TEST DI SWAGGER UI, SEBAIKNYA LOGIN DITANGANI OLEH CONTROLLER TERPISAH
+      post :sign_in_with_password,
+        route: "/sign-in",
+        derive_filter?: false,
+        metadata: fn _conn, user, _request ->
+          %{
+            token: Map.get(user.__metadata__, :token)
+          }
+        end
+    end
   end
 
   actions do
@@ -107,11 +133,31 @@ defmodule Ashapi.Accounts.User do
 
       # validates the provided email and password and generates a token
       prepare AshAuthentication.Strategy.Password.SignInPreparation
+      # generates a refresh token after successful sign-in
+      prepare Ashapi.Accounts.User.Preparations.GenerateRefreshToken
 
       metadata :token, :string do
         description "A JWT that can be used to authenticate the user."
         allow_nil? false
       end
+
+      metadata :refresh_token, :string do
+        description "A JWT refresh token for obtaining new access tokens."
+        allow_nil? false
+      end
+    end
+
+    read :exchange_refresh_token do
+      description "Exchange a refresh token for a new access token."
+      get? true
+
+      argument :refresh_token, :string, allow_nil?: false, sensitive?: true
+
+      metadata :token, :string, allow_nil?: false
+      metadata :refresh_token, :string, allow_nil?: false
+
+      prepare set_context(%{strategy_name: :password})
+      prepare Ashapi.Accounts.User.Preparations.ExchangeRefreshToken
     end
 
     read :sign_in_with_token do
@@ -247,6 +293,11 @@ defmodule Ashapi.Accounts.User do
     policy action(:sign_in_with_password) do
       authorize_if always()
     end
+
+    # public exchange refresh token
+    policy action(:exchange_refresh_token) do
+      authorize_if always()
+    end
   end
 
   attributes do
@@ -255,7 +306,7 @@ defmodule Ashapi.Accounts.User do
     attribute :email, :ci_string do
       allow_nil? false
       public? true
-      constraints [match: ~r/^[^\s@]+@[^\s@]+\.[^\s@]+$/]
+      constraints match: ~r/^[^\s@]+@[^\s@]+\.[^\s@]+$/
     end
 
     attribute :hashed_password, :string do
@@ -268,29 +319,5 @@ defmodule Ashapi.Accounts.User do
 
   identities do
     identity :unique_email, [:email]
-  end
-
-  json_api do
-    type "user"
-    include_nil_values? false
-    
-    routes do
-      base "/users"
-
-      post :register_with_password, 
-        route: "/register",
-        derive_filter?: false
-
-      # LOGIN DITANGANI OLEH AUTH CONTROLLER, JADI TIDAK PERLU DITAMBAHKAN DI SINI
-      post :sign_in_with_password, # LOGIN HANYA UNTUK TEST DI SWAGGER UI, SEBAIKNYA LOGIN DITANGANI OLEH CONTROLLER TERPISAH
-        route: "/sign-in",
-        derive_filter?: false,
-        metadata: fn _conn, user, _request ->
-          %{
-            token: Map.get(user.__metadata__, :token)
-          }
-      end
-
-    end
   end
 end

@@ -7,6 +7,7 @@ defmodule AshapiWeb.Plugs.CheckOrigin do
   def call(conn, _opts) do
     origin = get_req_header(conn, "origin") |> List.first()
     cors_config = Application.get_env(:ashapi, :cors, []) || []
+
     allowed_origins =
       case cors_config do
         list when is_list(list) -> Keyword.get(list, :allowed_origins, [])

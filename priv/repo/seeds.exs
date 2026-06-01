@@ -34,9 +34,21 @@ end
 
 # ── Sample Posts ──────────────────────────────────────────
 posts = [
-  %{title: "Getting Started with Ash Framework", content: "Ash Framework is a declarative application framework for Elixir. It provides a rich set of tools for building domain-driven applications."},
-  %{title: "Why Elixir Matters in 2026", content: "Elixir continues to gain traction for building scalable, fault-tolerant systems. With its Ruby-like syntax and Erlang-grade concurrency, it's a compelling choice for modern backends."},
-  %{title: "Phoenix LiveView vs JavaScript SPAs", content: "LiveView offers a compelling alternative to JavaScript SPAs by rendering UI on the server and updating the client via WebSockets. This reduces frontend complexity significantly."},
+  %{
+    title: "Getting Started with Ash Framework",
+    content:
+      "Ash Framework is a declarative application framework for Elixir. It provides a rich set of tools for building domain-driven applications."
+  },
+  %{
+    title: "Why Elixir Matters in 2026",
+    content:
+      "Elixir continues to gain traction for building scalable, fault-tolerant systems. With its Ruby-like syntax and Erlang-grade concurrency, it's a compelling choice for modern backends."
+  },
+  %{
+    title: "Phoenix LiveView vs JavaScript SPAs",
+    content:
+      "LiveView offers a compelling alternative to JavaScript SPAs by rendering UI on the server and updating the client via WebSockets. This reduces frontend complexity significantly."
+  }
 ]
 
 for attrs <- posts do

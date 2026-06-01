@@ -79,6 +79,16 @@ defmodule Ashapi.Accounts.Token do
       description "AshAuthentication can interact with the token resource"
       authorize_if always()
     end
+
+    policy action(:revoke_all_stored_for_subject) do
+      description "Allow revoking all tokens for a subject"
+      authorize_if always()
+    end
+
+    policy action_type([:read, :update]) do
+      description "Allow token resource management"
+      authorize_if always()
+    end
   end
 
   attributes do

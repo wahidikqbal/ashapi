@@ -20,7 +20,6 @@ defmodule AshapiWeb.Router do
     plug :put_secure_browser_headers
     plug AshapiWeb.Plugs.CheckOrigin
     plug :fetch_cookies
-    plug AshapiWeb.Plugs.TokenFromCookie
     plug :load_from_bearer
     plug :set_actor, :user
     plug AshapiWeb.Plugs.AuthPlug
@@ -42,6 +41,7 @@ defmodule AshapiWeb.Router do
 
     post "/auth/login", AuthController, :login
     post "/auth/logout", AuthController, :logout
+    post "/auth/refresh", AuthController, :refresh
   end
 
   scope "/api", AshapiWeb do

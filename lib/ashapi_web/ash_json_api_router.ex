@@ -4,5 +4,4 @@ defmodule AshapiWeb.AshJsonApiRouter do
     open_api: "/open_api",
     json_schema: "/json_schema",
     prefix: "/api/json"
-
 end

@@ -1,7 +1,7 @@
 defmodule Ashapi.Accounts do
-  use Ash.Domain, 
-  otp_app: :ashapi, 
-  extensions: [AshAdmin.Domain, AshJsonApi.Domain]
+  use Ash.Domain,
+    otp_app: :ashapi,
+    extensions: [AshAdmin.Domain, AshJsonApi.Domain]
 
   admin do
     show? true

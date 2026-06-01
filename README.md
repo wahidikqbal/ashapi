@@ -57,14 +57,15 @@
 
 ### Authentication & User Management
 - Registrasi user dengan email & password (bcrypt hashing)
-- Login dengan email & password → JWT token
-- Remember me functionality
+- Login dengan email & password → access token (30 menit) + refresh token (7 hari)
+- Refresh token rotation — revoke lama, buat baru setiap refresh
+- Logout revoke ALL tokens user (access + refresh)
+- Access token only in Astro server memory (never reaches browser)
+- Refresh token di HttpOnly cookie (Secure, SameSite=Strict, Path=/)
+- BFF pattern: Astro SSR sebagai proxy autentikasi
 - Email confirmation untuk user baru
 - Password reset via email
 - Change password
-- Logout (revoke token)
-- JWT-based authentication (cookie atau Bearer header)
-- Session management
 
 ### Blog Posts
 - CRUD posts (Create, Read, Update, Delete)
@@ -166,8 +167,10 @@ ashapi/
 ### Flow Request API
 
 ```
-Client (Browser/Mobile)
+Astro SSR (BFF) — semua request dari browser melalui Astro
        │
+       │  Authorization: Bearer <access_token> (set by Astro)
+       │  Cookie: refresh_token (forward by Astro jika perlu)
        ▼
   Phoenix Endpoint
        │
@@ -179,15 +182,15 @@ Client (Browser/Mobile)
        Router (lib/ashapi_web/router.ex)
             │
             ├── API Pipeline (:api)
-            │   ├── CheckOrigin plug
-            │   ├── TokenFromCookie plug
-            │   ├── load_from_bearer
+            │   ├── CheckOrigin plug (optional — trusting Astro proxy)
+            │   ├── load_from_bearer (verify access_token, purpose="user")
             │   ├── set_actor (Ash actor)
-            │   └── AuthPlug (JWT verification)
+            │   └── AuthPlug (copy assigns[:user] → :current_user)
             │
             ├── Scope /api/auth → AuthController (custom JSON)
             ├── Scope /api/json → AshJsonApiRouter (auto-generated)
             └── Scope / (browser) → LiveView pages
+               (auth routes redirect to / — use Astro instead)
 ```
 
 ### Ash Domain Flow
@@ -363,7 +366,7 @@ Auto-generated JSON:API compliant endpoints. Format request/response mengikuti s
 
 #### POST `/api/auth/login`
 
-Login dengan email & password.
+Login dengan email & password. **Hanya boleh dipanggil oleh Astro BFF** (internal), bukan langsung dari browser.
 
 **Request:**
 ```json
@@ -381,10 +384,13 @@ Login dengan email & password.
 ```json
 {
   "success": true,
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
   "message": "You are now signed in"
 }
 ```
-Cookie `token` akan diset secara otomatis (HttpOnly, SameSite=Lax).
+**Set-Cookie:** `refresh_token=<JWT>; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=604800`
+
+**Catatan Astro:** Ambil `access_token` dari body → simpan di cache. **Jangan forward `access_token` ke browser.** Forward hanya `Set-Cookie`.
 
 **Response (401):**
 ```json
@@ -394,9 +400,33 @@ Cookie `token` akan diset secara otomatis (HttpOnly, SameSite=Lax).
 }
 ```
 
+#### POST `/api/auth/refresh`
+
+Menukar refresh token dengan access token baru (refresh token rotation).
+
+**Cookie yang dikirim:** `refresh_token=<JWT>` (dikirim otomatis oleh browser via Astro)
+
+**Response (200):**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIs..."
+}
+```
+**Set-Cookie:** `refresh_token=<JWT baru>; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=604800` (refresh token rotation — token lama sudah tidak valid)
+
+**Response (401):**
+```json
+{
+  "error": "Invalid or expired refresh token"
+}
+```
+**Set-Cookie:** `refresh_token=; Path=/; Max-Age=0` (cookie dihapus)
+
 #### POST `/api/auth/logout`
 
-Logout dan revoke token.
+Logout dan revoke semua token user (access + refresh).
+
+**Header yang dikirim:** `Authorization: Bearer <access_token>`
 
 **Response (200):**
 ```json
@@ -405,10 +435,13 @@ Logout dan revoke token.
   "message": "Logged out"
 }
 ```
+**Set-Cookie:** `refresh_token=; Path=/; Max-Age=0` (cookie dihapus)
 
 #### GET `/api/auth/me`
 
 Get current authenticated user.
+
+**Header yang dikirim:** `Authorization: Bearer <access_token>`
 
 **Response (terautentikasi - 200):**
 ```json
@@ -430,16 +463,18 @@ Get current authenticated user.
 
 ---
 
-### Browser Auth Routes
+### Browser Auth Routes (LiveView — Terdepresiasi)
 
-| Route | Deskripsi |
-|-------|-----------|
-| `/` | Home page |
-| `/auth/sign-in` | Sign in page (LiveView) |
-| `/auth/register` | Register page (LiveView) |
-| `/auth/reset` | Password reset page (LiveView) |
-| `/auth/confirm` | Email confirmation page |
-| `/auth/logout` | Sign out |
+Auth LiveView routes dinonaktifkan. Semua autentikasi dipindahkan ke Astro SSR (BFF).
+
+| Route | Status | Deskripsi |
+|-------|--------|-----------|
+| `/` | Aktif | Home page |
+| `/auth/sign-in` | ❌ Redirect ke `/` | Pindah ke Astro |
+| `/auth/register` | ❌ Redirect ke `/` | Pindah ke Astro |
+| `/auth/reset` | ❌ Redirect ke `/` | Pindah ke Astro |
+| `/auth/confirm` | Aktif | Email confirmation page |
+| `/auth/logout` | ❌ Redirect ke `/` | Pindah ke Astro |
 
 ### Swagger / OpenAPI
 
@@ -451,28 +486,208 @@ Dokumentasi API interaktif berbasis OpenAPI (via OpenApiSpex). Swagger UI otomat
 
 ## Authentication & Authorization
 
-### Authentication Flow
+### Arsitektur Auth (BFF Pattern)
 
-1. **Register:** User register → JWT token + confirmation email
-2. **Login:** Email + password → JWT token (disimpan di HttpOnly cookie + session)
-3. **Authenticated Request:** Token dikirim via:
-   - Cookie `token` (HttpOnly, SameSite=Lax)
-   - Authorization header: `Bearer <jwt_token>`
-4. **Logout:** Token di-revoke, cookie dihapus
+**Ashapi** menggunakan **Backend-for-Frontend (BFF)** pattern dengan **Astro SSR** sebagai BFF dan **Phoenix** sebagai API backend. Authentication menggunakan dual-token (access + refresh token).
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Browser (User)                           │
+│                                                                 │
+│  Cookie: refresh_token (HttpOnly, Secure, SameSite=Strict)      │
+│                                                                 │
+│  Client-side fetch → /astro/api/auth/* (Astro BFF)              │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                 Astro SSR (BFF Layer)                            │
+│                                                                 │
+│  - In-memory cache untuk access_token                           │
+│  - Decode JWT → cek exp → refresh jika expired (buffer 30dtk)  │
+│  - Proxy semua API call ke Phoenix                              │
+│  - Filter access_token dari response sebelum ke browser         │
+│  - Forward Set-Cookie refresh_token ke browser                  │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │  Authorization: Bearer <access_token>
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  Phoenix API (ashapi)                            │
+│                                                                 │
+│  - Verify access token (JWT, 30 menit, purpose: "user")         │
+│  - Refresh endpoint → validasi + rotation refresh token (7 hari)│
+│  - Revoke token di database saat logout                         │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     PostgreSQL                                   │
+│                                                                  │
+│  tokens table:                                                   │
+│  - access token (purpose="user", expires_at=+30m)               │
+│  - refresh token (purpose="user", expires_at=+7d)               │
+│  - revocation records (purpose="revocation")                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Token Flow
+
+| Token | Lokasi | Umur | Disimpan di DB? | Fungsi |
+|---|---|---|---|---|
+| **Access Token** | In-memory cache Astro server | 30 menit | Ya (purpose="user") | Autentikasi setiap API call ke Phoenix |
+| **Refresh Token** | HttpOnly cookie browser | 7 hari | Ya (purpose="user") | Mendapatkan access token baru via rotation |
+
+**Access token tidak pernah sampai ke browser** — hanya Astro server yang memegangnya.
+
+---
+
+### 1. Login Flow
+
+```
+Browser                          Astro SSR (BFF)                          Phoenix
+  │                                │                                        │
+  │  LoginForm.svelte              │                                        │
+  │  fetch('/astro/api/auth/       │                                        │
+  │    login', POST)               │                                        │
+  │  {email, password} ───────────►│                                        │
+  │                                │                                        │
+  │                                ├─ POST /api/auth/login ───────────────►│
+  │                                │  {data: {attributes: {email, password}}}│
+  │                                │                                        │
+  │                                │                                        ├─ sign_in_with_password
+  │                                │                                        ├─ Generate ACCESS TOKEN (JWT, 30 menit)
+  │                                │                                        │  → purpose: "user", jti, sub: "user?id=..."
+  │                                │                                        │  → INSERT INTO tokens
+  │                                │                                        ├─ Generate REFRESH TOKEN (JWT, 7 hari)
+  │                                │                                        │  → INSERT INTO tokens
+  │                                │                                        │
+  │                                │  ◄── {access_token, message, ...} +   │
+  │                                │        Set-Cookie: refresh_token=...   │
+  │                                │                                        │
+  │                                ├─ 1. Simpan access_token di cache      │
+  │                                ├─ 2. FILTER response: HAPUS access_token│
+  │                                ├─ 3. Forward Set-Cookie refresh_token   │
+  │                                │                                        │
+  │  ◄── {success, message} +     │                                        │
+  │       Set-Cookie: refresh_token│                                        │
+```
+
+### 2. Data Request Flow (SSR — misal dashboard)
+
+```
+Browser                          Astro SSR (BFF)                          Phoenix
+  │                                │                                        │
+  │  GET /dashboard                │                                        │
+  │  Cookie: refresh_token=... ───►│                                        │
+  │                                │                                        │
+  │                                ├─ getAccessToken(request):              │
+  │                                │  1. Baca refresh_token dari cookie     │
+  │                                │  2. Cek cache by hash(refresh_token)   │
+  │                                │                                        │
+  │                                ├─ Cache VALID (exp > 30dtk buffer):    │
+  │                                │  → pakai access_token                  │
+  │                                │                                        │
+  │                                ├─ Cache EXPIRED/TIDAK ADA:             │
+  │                                │  → refresh (lihat flow #3)             │
+  │                                │                                        │
+  │                                ├─ apiFetch(GET /api/json/posts):        │
+  │                                │  GET /api/json/posts ─────────────────►│
+  │                                │  Authorization: Bearer <access_token>  │
+  │                                │                                        │
+  │                                │                                        ├─ load_from_bearer:
+  │                                │                                        │  Validasi access_token (purpose="user")
+  │                                │                                        │  → conn.assigns[:user]
+  │                                │                                        │
+  │                                │  ◄── data ────────────────────────────│
+  │                                │                                        │
+  │  ◄── HTML rendered +          │                                        │
+  │       Set-Cookie (jika ada    │                                        │
+  │       refresh token rotation) │                                        │
+```
+
+### 3. Refresh Token Rotation
+
+```
+Astro SSR                                                                 Phoenix
+  │                                                                         │
+  ├─ refreshAccessToken():                                                  │
+  │  cache expired / tidak ada                                              │
+  │                                                                         │
+  │  POST /api/auth/refresh ───────────────────────────────────────────────►│
+  │  Cookie: refresh_token=<old>  (forward dari cookie browser)             │
+  │                                                                         │
+  │                                                                         ├─ exchange_refresh_token action:
+  │                                                                         │  1. Verify JWT refresh token
+  │                                                                         │  2. revoke_jti (purpose → "revocation")
+  │                                                                         │  3. Generate access_token BARU (30m)
+  │                                                                         │  4. Generate refresh_token BARU (7d)
+  │                                                                         │     → INSERT INTO tokens
+  │                                                                         │
+  │  ◄── {access_token} +                                                   │
+  │       Set-Cookie: refresh_token=<new>                                   │
+  │                                                                         │
+  ├─ Simpan access_token di cache (key: hash(new_refresh_token))            │
+  ├─ Hapus cache key lama                                                   │
+  ├─ Forward Set-Cookie refresh_token baru ke browser                       │
+```
+
+### 4. Logout Flow
+
+```
+Browser                          Astro SSR (BFF)                          Phoenix
+  │                                │                                        │
+  │  LogoutPage.svelte             │                                        │
+  │  fetch('/astro/api/auth/       │                                        │
+  │    logout', POST) ────────────►│                                        │
+  │  Cookie: refresh_token=...     │                                        │
+  │                                │                                        │
+  │                                ├─ resolveAccessToken(request):          │
+  │                                │  → access_token dari cache             │
+  │                                │                                        │
+  │                                ├─ POST /api/auth/logout ──────────────►│
+  │                                │  Authorization: Bearer <access_token>  │
+  │                                │                                        │
+  │                                │                                        ├─ load_from_bearer:
+  │                                │                                        │  validasi access_token
+  │                                │                                        │  → conn.assigns[:current_user]
+  │                                │                                        │
+  │                                │                                        ├─ revoke_all_tokens_for_subject:
+  │                                │                                        │  subject = "user?id=#{user.id}"
+  │                                │                                        │  SELECT * FROM tokens WHERE subject = "..."
+  │                                │                                        │  → UPDATE purpose="revocation" utk SETIAP token
+  │                                │                                        │
+  │                                │  ◄── 200 {success, message} +         │
+  │                                │       Set-Cookie: hapus refresh_token  │
+  │                                │                                        │
+  │                                ├─ deleteCachedToken(hash(refresh_token))│
+  │                                ├─ Forward Set-Cookie hapus ke browser   │
+  │                                │                                        │
+  │  ◄── 200 + Cookie refresh_token dihapus                                │
+  │                                │                                        │
+  │  → Redirect ke /auth/login    │                                        │
+```
+
+---
 
 ### Token Configuration
 
-- **Token lifetime:** 1 menit (development) — ubah ke `{24, :hours}` untuk produksi
-- **Token storage:** Database (`tokens` table) — semua tokens disimpan
-- **Signing secret:** Dari `Ashapi.Secrets` module (env config)
+| Parameter | Value |
+|-----------|-------|
+| **Access token lifetime** | 30 menit |
+| **Refresh token lifetime** | 7 hari |
+| **Refresh token rotation** | Ya — setiap refresh revoke lama, buat baru |
+| **Buffer refresh** | 30 detik sebelum expired (Astro side) |
+| **Cookie name (dev)** | `refresh_token_dev` |
+| **Cookie name (prod)** | `refresh_token` |
+| **Cookie path** | `/` |
+| **Cookie flags** | HttpOnly, Secure (prod), SameSite=Strict |
 
 ### Middleware Chain (API Pipeline)
 
 1. **CheckOrigin** — Validasi Origin header terhadap whitelist
-2. **TokenFromCookie** — Baca token dari cookie → set sebagai Bearer header
-3. **load_from_bearer** — Load user dari Bearer token
-4. **set_actor** — Set Ash actor untuk policy evaluation
-5. **AuthPlug** — Verifikasi JWT, assign `current_user`
+2. **load_from_bearer** — Load user dari Bearer token (access_token dengan purpose "user")
+3. **set_actor** — Set Ash actor untuk policy evaluation
+4. **AuthPlug** — Copy `conn.assigns[:user]` → `conn.assigns[:current_user]`
 
 ### Authorization Policies (Ash Policy)
 
@@ -481,6 +696,11 @@ Dokumentasi API interaktif berbasis OpenAPI (via OpenApiSpex). Swagger UI otomat
 - Change password: hanya user sendiri
 - Register: public
 - Sign in: public
+- `exchange_refresh_token`: public (dengan refresh token yang valid)
+
+**Token:**
+- `revoke_all_stored_for_subject`: always allowed
+- read/update: always allowed
 
 **Post:**
 - Read: public (semua orang)
@@ -747,15 +967,20 @@ Preview email yang dikirim via Swoosh (development).
 ## Keamanan
 
 ### Cookie Security
-- `HttpOnly: true` — Tidak bisa diakses JavaScript
-- `SameSite: "Strict"` (session), `"Lax"` (token) — CSRF protection
+- **Refresh token** di HttpOnly cookie, tidak bisa diakses JavaScript
+- `SameSite: "Strict"` — CSRF protection
 - `Secure: true` di production — Hanya via HTTPS
+- `Path: /` — Agar middleware Astro bisa baca di semua halaman SSR
+- Nama cookie per environment: `refresh_token_dev` (dev), `refresh_token` (prod)
 
 ### Token Security
+- **Access token** hanya di in-memory cache Astro server — tidak pernah ke browser
+- **Refresh token** di HttpOnly cookie + disimpan di database
 - JWT ditandatangani dengan signing secret
-- Token disimpan di database (allow revocation)
-- Token lifetime terbatas (1 menit dev, 24 jam prod)
-- Revoke token saat logout
+- Refresh token rotation: setiap refresh revoke lama, buat baru
+- Logout revoke ALL tokens (access + refresh) untuk user
+- Token lifetime: access 30 menit, refresh 7 hari
+- Buffer 30 detik sebelum expired — hindari race condition concurrent requests
 
 ### CORS Security
 - Origin whitelist (bukan wildcard)

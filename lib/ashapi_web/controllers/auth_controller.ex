@@ -1,145 +1,92 @@
 defmodule AshapiWeb.AuthController do
   use AshapiWeb, :controller
-  use AshAuthentication.Phoenix.Controller
+  require Ash.Query
 
-  def success(conn, activity, user, token) do
-    return_to = get_session(conn, :return_to) || ~p"/"
-
-    message =
-      case activity do
-        {:confirm_new_user, :confirm} -> "Your email address has now been confirmed"
-        {:password, :reset} -> "Your password has successfully been reset"
-        _ -> "You are now signed in"
-      end
-
-    conn
-    |> delete_session(:return_to)
-    |> store_in_session(user)
-    |> put_resp_cookie(cookie_name(), token,
-        path: "/",
-        http_only: true,
-        secure: cookie_secure?(),
-        same_site: "Strict",
-        max_age: 86_400
-      )
-    |> assign(:current_user, user)
-    |> put_flash(:info, message)
-    |> redirect(to: return_to)
-  end
-
-  def failure(conn, _activity, _reason) do
-    conn
-    |> put_flash(:error, "Incorrect email or password")
-    |> redirect(to: ~p"/sign-in")
-  end
-
-  def sign_out(conn, _params) do
-    return_to = get_session(conn, :return_to) || ~p"/"
-
-    conn
-    |> revoke_token()
-    |> configure_session(drop: true)
-    |> delete_resp_cookie(cookie_name())
-    |> put_flash(:info, "You are now signed out")
-    |> redirect(to: return_to)
-  end
-
+  # POST /api/auth/login
   def login(conn, params) do
-    attributes =
-      get_in(params, ["data", "attributes"]) || %{}
+    attributes = get_in(params, ["data", "attributes"]) || %{}
 
     case Ashapi.Accounts.User
-         |> Ash.Query.for_read(
-              :sign_in_with_password,
-              attributes
-            )
+         |> Ash.Query.for_read(:sign_in_with_password, attributes)
          |> Ash.read_one() do
       {:ok, user} ->
-        token =
-          user.__metadata__.token
+        access_token = user.__metadata__.token
+        refresh_token = user.__metadata__.refresh_token
 
         conn
-        |> assign(:current_user, user)
-        |> put_resp_cookie(
-             cookie_name(),
-             token,
-             http_only: true,
-             secure: cookie_secure?(),
-             same_site: "Strict",
-             max_age: 86_400
-           )
+        |> put_resp_cookie(cookie_name(), refresh_token,
+          http_only: true,
+          secure: cookie_secure?(),
+          same_site: "Strict",
+          path: "/",
+          max_age: 604_800
+        )
         |> json(%{
-             success: true,
-             message: "You are now signed in",
-           })
+          success: true,
+          access_token: access_token,
+          message: "You are now signed in"
+        })
 
       {:error, _error} ->
         conn
         |> put_status(:unauthorized)
         |> json(%{
-             success: false,
-             error: "Incorrect email or password"
-           })
+          success: false,
+          error: "Incorrect email or password"
+        })
     end
   end
 
+  # POST /api/auth/refresh
+  def refresh(conn, _params) do
+    refresh_token = conn.cookies[cookie_name()]
+
+    if refresh_token do
+      case Ashapi.Accounts.User
+           |> Ash.Query.for_read(:exchange_refresh_token, %{refresh_token: refresh_token})
+           |> Ash.read_one() do
+        {:ok, user} ->
+          new_access_token = user.__metadata__.token
+          new_refresh_token = user.__metadata__.refresh_token
+
+          conn
+          |> put_resp_cookie(cookie_name(), new_refresh_token,
+            http_only: true,
+            secure: cookie_secure?(),
+            same_site: "Strict",
+            path: "/",
+            max_age: 604_800
+          )
+          |> json(%{access_token: new_access_token})
+
+        {:error, _reason} ->
+          conn
+          |> delete_resp_cookie(cookie_name())
+          |> put_status(:unauthorized)
+          |> json(%{error: "Invalid or expired refresh token"})
+      end
+    else
+      conn
+      |> put_status(:unauthorized)
+      |> json(%{error: "No refresh token provided"})
+    end
+  end
+
+  # POST /api/auth/logout
   def logout(conn, _params) do
+    current_user = conn.assigns[:current_user]
+
+    if current_user do
+      revoke_all_tokens_for_subject("user?id=#{current_user.id}")
+    end
+
     conn
-    |> revoke_token()
     |> delete_resp_cookie(cookie_name())
     |> put_status(:ok)
-    |> json(%{
-      success: true,
-      message: "Logged out"
-    })
+    |> json(%{success: true, message: "Logged out"})
   end
 
-  defp cookie_name do
-    Application.get_env(:ashapi, :token_cookie_name, "token")
-  end
-
-  defp cookie_secure? do
-    Application.get_env(:ashapi, :cookie_secure, false)
-  end
-
-  defp revoke_token(conn) do
-    conn = fetch_cookies(conn)
-
-    case get_token_from_conn(conn) do
-      nil ->
-        conn
-
-      token ->
-        case AshAuthentication.TokenResource.revoke(
-              Ashapi.Accounts.Token,
-              token
-            ) do
-          :ok ->
-            IO.puts("TOKEN REVOKED")
-
-          {:error, error} ->
-            IO.inspect(error, label: "REVOKE ERROR")
-
-          other ->
-            IO.inspect(other, label: "REVOKE RESULT")
-        end
-
-        conn
-    end
-  end
-
-  defp get_token_from_conn(conn) do
-    conn.cookies[cookie_name()] ||
-      conn
-      |> get_req_header("authorization")
-      |> List.first()
-      |> strip_bearer()
-  end
-
-  defp strip_bearer("Bearer " <> token), do: token
-  defp strip_bearer("bearer " <> token), do: token
-  defp strip_bearer(_), do: nil
-
+  # GET /api/auth/me
   def me(conn, _params) do
     current_user = conn.assigns[:current_user]
 
@@ -154,9 +101,35 @@ defmodule AshapiWeb.AuthController do
     else
       conn
       |> put_status(:unauthorized)
-      |> json(%{
-          authenticated: false
-        })
+      |> json(%{authenticated: false})
     end
+  end
+
+  defp revoke_all_tokens_for_subject(subject) do
+    case Ashapi.Accounts.Token
+         |> Ash.Query.new()
+         |> Ash.Query.filter(subject: subject)
+         |> Ash.read() do
+      {:ok, []} ->
+        :ok
+
+      {:ok, tokens} ->
+        Enum.each(tokens, fn token ->
+          token
+          |> Ash.Changeset.for_update(:revoke_all_stored_for_subject, %{subject: subject})
+          |> Ash.update()
+        end)
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp cookie_name do
+    Application.get_env(:ashapi, :refresh_token_cookie_name, "refresh_token")
+  end
+
+  defp cookie_secure? do
+    Application.get_env(:ashapi, :cookie_secure, false)
   end
 end

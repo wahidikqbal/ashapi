@@ -75,6 +75,7 @@ config :ashapi,
   ash_domains: [Ashapi.Blog, Ashapi.Accounts],
   env: Mix.env(),
   token_cookie_name: "token",
+  refresh_token_cookie_name: "refresh_token",
   cookie_secure: false
 
 # Configure the endpoint

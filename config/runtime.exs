@@ -91,8 +91,7 @@ if config_env() == :prod do
       |> Enum.map(&String.trim/1)
     end
 
-  config :ashapi, :cors,
-    allowed_origins: cors_allowed_origins
+  config :ashapi, :cors, allowed_origins: cors_allowed_origins
 
   # ## SSL Support
   #

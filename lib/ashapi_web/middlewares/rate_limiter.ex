@@ -61,6 +61,7 @@ defmodule AshapiWeb.Plugs.RateLimiter do
     after
       @window_ms ->
         now = now_window()
+
         :ets.foldl(
           fn {key = {_ip, window}, _count}, :ok ->
             if window < now, do: :ets.delete(@table, key)
